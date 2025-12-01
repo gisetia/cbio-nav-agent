@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  cbio-nav-agent:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      # Override if your MCP server is reachable at a different address.
+      MCP_SERVER_URL: ${MCP_SERVER_URL:-http://host.docker.internal:8002/mcp}
+      # You can also set DEFAULT_MODEL/DEFAULT_TEMPERATURE/etc. here if desired.
+    volumes:
+      # Allow editing prompts without rebuilding.
+      - ./prompts:/app/prompts:ro
+    command: uvicorn cbio_nav_agent.api:app --host 0.0.0.0 --port 5000
