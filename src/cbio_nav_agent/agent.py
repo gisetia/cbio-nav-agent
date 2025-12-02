@@ -50,6 +50,10 @@ class ClaudeMCPAgent:
         self.max_output_tokens = max_output_tokens
         self.system_prompt = system_prompt or ""
         self.temperature = temperature
+        logger.info(
+            "Using system prompt",
+            extra={"system_prompt_preview": (self.system_prompt[:120] if self.system_prompt else "<empty>")},
+        )
 
     @staticmethod
     def _format_system_content(system_prompt: Optional[str]):
@@ -58,8 +62,8 @@ class ClaudeMCPAgent:
             return None
         return [{"type": "text", "text": str(system_prompt)}]
 
-    async def ask(self, question: str) -> str:
-        """Ask Claude the question, invoking MCP tools when requested."""
+    async def ask(self, messages: List[MessageParam]) -> str:
+        """Ask Claude using the provided conversation history and invoke MCP tools when requested."""
         logger.info(
             "Starting ask",
             extra={"model": self.model, "mcp_server": self.mcp_client.server_url},
@@ -67,13 +71,18 @@ class ClaudeMCPAgent:
         tools = [tool.to_anthropic() for tool in await self.mcp_client.list_tools()]
         logger.info("Discovered %d MCP tools", len(tools))
 
-        messages: List[MessageParam] = [{"role": "user", "content": question}]
+        # Work on a shallow copy so we don't mutate the caller's list.
+        conversation: List[MessageParam] = list(messages)
         answer_parts: List[str] = []
 
         while True:
             logger.info(
                 "Claude turn",
-                extra={"messages": messages, "temperature": self.temperature, "max_output_tokens": self.max_output_tokens},
+                extra={
+                    "messages": conversation,
+                    "temperature": self.temperature,
+                    "max_output_tokens": self.max_output_tokens,
+                },
             )
             system_content = self._format_system_content(self.system_prompt)
             request_kwargs = dict(
@@ -81,14 +90,14 @@ class ClaudeMCPAgent:
                 max_tokens=self.max_output_tokens,
                 tools=tools,
                 temperature=self.temperature,
-                messages=messages,
+                messages=conversation,
             )
             if system_content is not None:
                 request_kwargs["system"] = system_content
 
             response = await self.client.messages.create(**request_kwargs)
 
-            messages.append({"role": "assistant", "content": response.content})
+            conversation.append({"role": "assistant", "content": response.content})
 
             tool_requests = [
                 block for block in response.content if isinstance(block, ToolUseBlock)
@@ -144,7 +153,7 @@ class ClaudeMCPAgent:
                 )
 
             # Feed tool results back to Claude for another reasoning step.
-            messages.append({"role": "user", "content": tool_results})
+            conversation.append({"role": "user", "content": tool_results})
 
         return "".join(answer_parts).strip()
 
