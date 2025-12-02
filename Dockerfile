@@ -19,4 +19,4 @@ RUN pip install --upgrade pip && pip install .
 
 EXPOSE 4000
 
-CMD ["uvicorn", "cbio_nav_agent.api:app", "--host", "0.0.0.0", "--port", "4000"]
+CMD ["uvicorn", "cbio_nav_agent.api:app", "--host", "0.0.0.0", "--port", "5000"]
