@@ -82,6 +82,11 @@ async def chat_completions(req: ChatCompletionRequest):
             status_code=400, detail="A user message is required to ask a question."
         )
 
+    # Convert incoming Pydantic messages to the format expected by the Anthropic client.
+    conversation = [
+        {"role": message.role, "content": message.content} for message in req.messages
+    ]
+
     try:
         agent = ClaudeMCPAgent(
             api_key=req.api_key,
@@ -94,7 +99,7 @@ async def chat_completions(req: ChatCompletionRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    answer = await agent.ask(question)
+    answer = await agent.ask(conversation)
 
     chunks = _chunk_answer(answer, chunk_size=DEFAULT_CHUNK_SIZE)
 
