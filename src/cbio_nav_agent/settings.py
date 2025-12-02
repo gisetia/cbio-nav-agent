@@ -15,21 +15,24 @@ DEFAULT_MCP_SERVER_URL = os.getenv(
 DEFAULT_CHUNK_SIZE = int(os.getenv("DEFAULT_CHUNK_SIZE", "1200"))
 DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.0"))
 DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv("DEFAULT_MAX_OUTPUT_TOKENS", "1024"))
-# Resolve the prompts directory relative to the repo root so uvicorn can be started anywhere.
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SYSTEM_PROMPT_FILE = Path(
-    os.getenv(
-        "SYSTEM_PROMPT_FILE",
-        _PROJECT_ROOT / "prompts" / "system_prompt.txt",
-    )
-)
+# Resolve a default prompt path, preferring an explicit env var.
+ENV_SYSTEM_PROMPT_FILE = os.getenv("SYSTEM_PROMPT_FILE")
 
 
 def load_system_prompt() -> str:
-    """Load the system prompt from the prompt file."""
-    prompt_path = Path(SYSTEM_PROMPT_FILE)
-    if prompt_path.exists():
-        return prompt_path.read_text(encoding="utf-8").strip()
+    """Load the system prompt from a file if present."""
+    candidate_paths = []
+
+    if ENV_SYSTEM_PROMPT_FILE:
+        candidate_paths.append(Path(ENV_SYSTEM_PROMPT_FILE))
+
+    # Common locations: working directory and project root when installed.
+    candidate_paths.append(Path.cwd() / "prompts" / "system_prompt.txt")
+    candidate_paths.append(Path(__file__).resolve().parent.parent / "prompts" / "system_prompt.txt")
+
+    for prompt_path in candidate_paths:
+        if prompt_path.exists():
+            return prompt_path.read_text(encoding="utf-8").strip()
 
     return ""
 
