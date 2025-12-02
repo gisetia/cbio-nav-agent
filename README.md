@@ -24,6 +24,20 @@ Matches the reference `cbioportal_mcp_qa.api` module. POST to `/chat/completions
 }
 ```
 
+Example `curl` call (streaming):
+
+```bash
+curl -X POST http://localhost:5000/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "cbionav",
+    "stream": true,
+    "messages": [
+      {"role": "user", "content": "What is the median survival time in the Pediatric Neuroblastoma study from TARGET?"}
+    ]
+  }'
+```
+
 ### What it does
 
 - Discovers tools from the MCP server `http://cbioportal-navigator:8002/mcp`.
