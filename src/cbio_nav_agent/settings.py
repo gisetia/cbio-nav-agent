@@ -15,6 +15,12 @@ DEFAULT_MCP_SERVER_URL = os.getenv(
 DEFAULT_CHUNK_SIZE = int(os.getenv("DEFAULT_CHUNK_SIZE", "1200"))
 DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.0"))
 DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv("DEFAULT_MAX_OUTPUT_TOKENS", "1024"))
+# Toggle step-by-step streaming of thoughts/tool calls (True by default).
+ENABLE_STEP_STREAMING = os.getenv("ENABLE_STEP_STREAMING", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 # Resolve a default prompt path, preferring an explicit env var.
 ENV_SYSTEM_PROMPT_FILE = os.getenv("SYSTEM_PROMPT_FILE")
 

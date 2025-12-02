@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from typing import Iterable, List, Sequence
+from typing import AsyncIterable, Iterable, List, Sequence
 
 
 def _base_payload(model: str) -> dict:
@@ -63,3 +63,24 @@ def chat_completion_response(
         }
     )
     return payload
+
+
+async def async_sse_chat_completions(
+    chunk_async_iterable: AsyncIterable[str], model: str
+) -> AsyncIterable[str]:
+    """Async generator yielding SSE-formatted chunks for async sources."""
+    base = _base_payload(model)
+    async for chunk in chunk_async_iterable:
+        payload = {
+            **base,
+            "object": "chat.completion.chunk",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": chunk},
+                    "finish_reason": None,
+                }
+            ],
+        }
+        yield f"data: {json.dumps(payload)}\n\n"
+    yield "data: [DONE]\n\n"

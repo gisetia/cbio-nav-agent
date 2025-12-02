@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import json
-from typing import List, Optional
+import uuid
+from typing import AsyncIterable, List, Optional
 
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, ToolResultBlockParam, ToolUseBlock
@@ -62,8 +63,8 @@ class ClaudeMCPAgent:
             return None
         return [{"type": "text", "text": str(system_prompt)}]
 
-    async def ask(self, messages: List[MessageParam]) -> str:
-        """Ask Claude using the provided conversation history and invoke MCP tools when requested."""
+    async def ask_stream(self, messages: List[MessageParam]) -> AsyncIterable[str]:
+        """Yield intermediate and final responses while invoking MCP tools."""
         logger.info(
             "Starting ask",
             extra={"model": self.model, "mcp_server": self.mcp_client.server_url},
@@ -124,6 +125,7 @@ class ClaudeMCPAgent:
                         "text_length": len(combined_text),
                     },
                 )
+                yield combined_text
 
             if not tool_requests:
                 logger.info("No tool requests, finishing.")
@@ -144,6 +146,7 @@ class ClaudeMCPAgent:
                     tool_use.name,
                     (tool_output or "").strip(),
                 )
+                yield (tool_output or "").strip() or "No content returned by tool."
                 tool_results.append(
                     ToolResultBlockParam(
                         type="tool_result",
@@ -155,7 +158,14 @@ class ClaudeMCPAgent:
             # Feed tool results back to Claude for another reasoning step.
             conversation.append({"role": "user", "content": tool_results})
 
-        return "".join(answer_parts).strip()
+    async def ask(self, messages: List[MessageParam]) -> str:
+        """Collect all streamed chunks into a single answer string."""
+        parts: List[str] = []
+        async for chunk in self.ask_stream(messages):
+            if parts:
+                parts.append("\n\n")
+            parts.append(chunk)
+        return "".join(parts).strip()
 
     @staticmethod
     def _normalize_model(model: str) -> str:

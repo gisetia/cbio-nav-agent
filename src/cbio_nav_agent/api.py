@@ -9,7 +9,11 @@ from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, StreamingResponse
 
 from .agent import ClaudeMCPAgent
-from .openai_adapter import chat_completion_response, sse_chat_completions
+from .openai_adapter import (
+    async_sse_chat_completions,
+    chat_completion_response,
+    sse_chat_completions,
+)
 from .settings import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_MCP_SERVER_URL,
@@ -17,6 +21,7 @@ from .settings import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
+    ENABLE_STEP_STREAMING,
 )
 
 app = FastAPI()
@@ -99,25 +104,27 @@ async def chat_completions(req: ChatCompletionRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    answer = await agent.ask(conversation)
-
-    chunks = _chunk_answer(answer, chunk_size=DEFAULT_CHUNK_SIZE)
-
     if req.stream:
         print(
             "-- -- [api] streaming response body",
-            {
-                "model_requested": req.model,
-                "model_used": resolved_model,
-                "chunk_count": len(chunks),
-                "chunks": chunks,
-            },
+            {"model_requested": req.model, "model_used": resolved_model, "step_streaming": ENABLE_STEP_STREAMING},
         )
+        if ENABLE_STEP_STREAMING:
+            stream = agent.ask_stream(conversation)
+            return StreamingResponse(
+                async_sse_chat_completions(stream, model=agent.model),
+                media_type="text/event-stream",
+            )
+        # Fallback: stream only the final answer in OpenAI-style chunks.
+        answer = await agent.ask(conversation)
+        chunks = _chunk_answer(answer, chunk_size=DEFAULT_CHUNK_SIZE)
         return StreamingResponse(
             sse_chat_completions(chunks, model=agent.model),
             media_type="text/event-stream",
         )
 
+    answer = await agent.ask(conversation)
+    chunks = _chunk_answer(answer, chunk_size=DEFAULT_CHUNK_SIZE)
     payload = chat_completion_response(
         chunk_iterable=chunks,
         model=agent.model,

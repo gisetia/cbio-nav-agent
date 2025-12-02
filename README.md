@@ -70,6 +70,11 @@ docker compose up --build
 
 - Ensure `ANTHROPIC_API_KEY` and `MCP_SERVER_URL` are set in `.env` or the compose `environment`. Use `host.docker.internal` to reach a host-running MCP server on macOS/Windows, or your host IP on Linux.
 
+### Streaming modes
+
+- By default, the agent streams step-by-step (assistant thoughts + tool calls/results) when `stream: true` is requested.
+- To disable step streaming and only stream the final answer in OpenAI-style chunks, set `ENABLE_STEP_STREAMING=false` in the environment.
+
 ### LibreChat
 
 You can connect LibreChat as a custom OpenAI-compatible endpoint:
