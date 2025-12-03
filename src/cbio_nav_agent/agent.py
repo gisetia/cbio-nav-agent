@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import os
 import json
-import uuid
 from typing import AsyncIterable, List, Optional
 
 from anthropic import AsyncAnthropic
@@ -17,6 +16,12 @@ from .settings import (
     DEFAULT_MODEL,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
+    STREAM_TEXT_LIVE,
+    STREAM_TOOL_NOTICES_LIVE,
+    STREAM_TOOL_ARGS_LIVE,
+    STREAM_TOOL_RESPONSES_LIVE,
+    INCLUDE_FINAL_TEXT,
+    INCLUDE_TOOL_LOGS_FINAL,
 )
 
 # Simple module logger; defaults to INFO if not configured by the host app.
@@ -63,8 +68,21 @@ class ClaudeMCPAgent:
             return None
         return [{"type": "text", "text": str(system_prompt)}]
 
-    async def ask_stream(self, messages: List[MessageParam]) -> AsyncIterable[str]:
-        """Yield intermediate and final responses while invoking MCP tools."""
+    async def ask_stream(
+        self,
+        messages: List[MessageParam],
+        *,
+        stream_mode: bool = True,
+        include_tool_logs_final: bool = INCLUDE_TOOL_LOGS_FINAL,
+        stream_text_live: Optional[bool] = None,
+        stream_tool_notices_live: Optional[bool] = None,
+        stream_tool_args_live: Optional[bool] = None,
+        stream_tool_responses_live: Optional[bool] = None,
+    ) -> AsyncIterable[str]:
+        """Yield intermediate and final responses while invoking MCP tools.
+
+        stream_mode=True streams live pieces; stream_mode=False emits only final pieces in order.
+        """
         logger.info(
             "Starting ask",
             extra={"model": self.model, "mcp_server": self.mcp_client.server_url},
@@ -75,6 +93,20 @@ class ClaudeMCPAgent:
         # Work on a shallow copy so we don't mutate the caller's list.
         conversation: List[MessageParam] = list(messages)
         answer_parts: List[str] = []
+        tool_logs: List[str] = []
+        ordered_events: List[str] = []  # used when stream_mode is False to preserve order
+
+        # Resolve effective streaming flags (allow per-call overrides).
+        eff_stream_text_live = STREAM_TEXT_LIVE if stream_text_live is None else stream_text_live
+        eff_stream_tool_notices_live = (
+            STREAM_TOOL_NOTICES_LIVE if stream_tool_notices_live is None else stream_tool_notices_live
+        )
+        eff_stream_tool_args_live = (
+            STREAM_TOOL_ARGS_LIVE if stream_tool_args_live is None else stream_tool_args_live
+        )
+        eff_stream_tool_responses_live = (
+            STREAM_TOOL_RESPONSES_LIVE if stream_tool_responses_live is None else stream_tool_responses_live
+        )
 
         while True:
             logger.info(
@@ -125,7 +157,10 @@ class ClaudeMCPAgent:
                         "text_length": len(combined_text),
                     },
                 )
-                yield combined_text
+                if stream_mode and eff_stream_text_live:
+                    yield combined_text
+                elif not stream_mode and INCLUDE_FINAL_TEXT:
+                    ordered_events.append(combined_text)
 
             if not tool_requests:
                 logger.info("No tool requests, finishing.")
@@ -138,6 +173,10 @@ class ClaudeMCPAgent:
                     tool_use.name,
                     json.dumps(tool_use.input or {}, indent=2),
                 )
+                if stream_mode and eff_stream_tool_notices_live:
+                    yield f"Calling {tool_use.name}..."
+                elif not stream_mode:
+                    ordered_events.append(f"Calling {tool_use.name}...")
                 tool_output = await self.mcp_client.call_tool(
                     tool_name=tool_use.name, arguments=tool_use.input or {}
                 )
@@ -146,7 +185,32 @@ class ClaudeMCPAgent:
                     tool_use.name,
                     (tool_output or "").strip(),
                 )
-                yield (tool_output or "").strip() or "No content returned by tool."
+                if stream_mode:
+                    if eff_stream_tool_args_live:
+                        yield (
+                            f"Args for {tool_use.name}: {json.dumps(tool_use.input or {}, indent=2)}"
+                        )
+                    if eff_stream_tool_responses_live:
+                        yield (
+                            (tool_output or "No content returned by tool.").strip()
+                        )
+                    if include_tool_logs_final:
+                        if not eff_stream_tool_args_live:
+                            tool_logs.append(
+                                f"Args for {tool_use.name}: {json.dumps(tool_use.input or {}, indent=2)}"
+                            )
+                        if not eff_stream_tool_responses_live:
+                            tool_logs.append(
+                                (tool_output or "No content returned by tool.").strip()
+                            )
+                else:
+                    if include_tool_logs_final:
+                        ordered_events.append(
+                            f"Args for {tool_use.name}: {json.dumps(tool_use.input or {}, indent=2)}"
+                        )
+                        ordered_events.append(
+                            (tool_output or "No content returned by tool.").strip()
+                        )
                 tool_results.append(
                     ToolResultBlockParam(
                         type="tool_result",
@@ -158,10 +222,39 @@ class ClaudeMCPAgent:
             # Feed tool results back to Claude for another reasoning step.
             conversation.append({"role": "user", "content": tool_results})
 
-    async def ask(self, messages: List[MessageParam]) -> str:
+        # Append collected pieces.
+        if stream_mode:
+            if include_tool_logs_final:
+                for log_entry in tool_logs:
+                    yield log_entry
+            final_answer = "".join(answer_parts).strip()
+            if final_answer and INCLUDE_FINAL_TEXT and not STREAM_TEXT_LIVE:
+                yield f"\n\n{final_answer}"
+        else:
+            for evt in ordered_events:
+                yield evt
+
+    async def ask(
+        self,
+        messages: List[MessageParam],
+        *,
+        include_tool_logs_final: bool = INCLUDE_TOOL_LOGS_FINAL,
+        stream_text_live: Optional[bool] = None,
+        stream_tool_notices_live: Optional[bool] = None,
+        stream_tool_args_live: Optional[bool] = None,
+        stream_tool_responses_live: Optional[bool] = None,
+    ) -> str:
         """Collect all streamed chunks into a single answer string."""
         parts: List[str] = []
-        async for chunk in self.ask_stream(messages):
+        async for chunk in self.ask_stream(
+            messages,
+            stream_mode=False,
+            include_tool_logs_final=include_tool_logs_final,
+            stream_text_live=stream_text_live,
+            stream_tool_notices_live=stream_tool_notices_live,
+            stream_tool_args_live=stream_tool_args_live,
+            stream_tool_responses_live=stream_tool_responses_live,
+        ):
             if parts:
                 parts.append("\n\n")
             parts.append(chunk)

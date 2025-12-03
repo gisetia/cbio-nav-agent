@@ -21,6 +21,32 @@ ENABLE_STEP_STREAMING = os.getenv("ENABLE_STEP_STREAMING", "true").lower() in {
     "true",
     "yes",
 }
+
+# Fine-grained streaming controls
+STREAM_TEXT_LIVE = os.getenv("STREAM_TEXT_LIVE", "true").lower() in {"1", "true", "yes"}
+STREAM_TOOL_NOTICES_LIVE = os.getenv("STREAM_TOOL_NOTICES_LIVE", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+STREAM_TOOL_ARGS_LIVE = os.getenv("STREAM_TOOL_ARGS_LIVE", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+STREAM_TOOL_RESPONSES_LIVE = os.getenv("STREAM_TOOL_RESPONSES_LIVE", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+# Which components to include in the final aggregated response
+INCLUDE_FINAL_TEXT = os.getenv("INCLUDE_FINAL_TEXT", "true").lower() in {"1", "true", "yes"}
+INCLUDE_TOOL_LOGS_FINAL = os.getenv("INCLUDE_TOOL_LOGS_FINAL", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 # Resolve a default prompt path, preferring an explicit env var.
 ENV_SYSTEM_PROMPT_FILE = os.getenv("SYSTEM_PROMPT_FILE")
 

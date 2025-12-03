@@ -18,9 +18,9 @@ Matches the reference `cbioportal_mcp_qa.api` module. POST to `/chat/completions
 
 ```json
 {
-  "model": "anthropic:claude-3-5-sonnet-20240620",  // or "cbionav" alias
   "messages": [{"role": "user", "content": "Hello"}],
-  "stream": true
+  "stream": true,
+  "full_stream": false
 }
 ```
 
@@ -30,12 +30,13 @@ Example `curl` call (streaming):
 curl -X POST http://localhost:5000/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "cbionav",
     "stream": true,
+    "full_stream": true,
     "messages": [
       {"role": "user", "content": "What is the median survival time in the Pediatric Neuroblastoma study from TARGET?"}
     ]
   }'
+
 ```
 
 ### What it does
@@ -44,21 +45,20 @@ curl -X POST http://localhost:5000/chat/completions \
 - Runs a Claude tool-using loop to satisfy the user request with full conversation history.
 - Streams responses using the OpenAI chat completions shape.
 
-If you need to target a different MCP endpoint, set `MCP_SERVER_URL`.
-
 ### Configuration
 
 - `ANTHROPIC_API_KEY` (required): API key for Claude.
 - `MCP_SERVER_URL` (optional): Defaults to `http://cbioportal-navigator:8002/mcp`. In Docker on macOS/Windows, use `http://host.docker.internal:8002/mcp` to reach the host.
-- `DEFAULT_MODEL` (optional): Override the default Claude model. The alias `cbionav` maps to this value.
+- `DEFAULT_MODEL` (optional): Override the default Claude model (applied server-side; requests cannot override).
 - `DEFAULT_TEMPERATURE`, `DEFAULT_MAX_OUTPUT_TOKENS`, `DEFAULT_CHUNK_SIZE` (optional): Set fixed generation parameters (not user-overridable per request).
+- Streaming controls (env): `ENABLE_STEP_STREAMING`, `STREAM_TEXT_LIVE`, `STREAM_TOOL_NOTICES_LIVE`, `STREAM_TOOL_ARGS_LIVE`, `STREAM_TOOL_RESPONSES_LIVE`, `INCLUDE_FINAL_TEXT`, `INCLUDE_TOOL_LOGS_FINAL`.
 
 ### Notes
 
 - The API is intentionally minimal; extend the agent logic in `cbio_nav_agent/agent.py` as needed.
 - The service defaults to streaming responses; set `"stream": false` to receive one JSON payload.
 - The default system prompt lives in `prompts/system_prompt.txt` (loaded from the current working directory or `SYSTEM_PROMPT_FILE`). Edit that file to change the agent’s initial instructions.
-- Override model via the API `model` field (or the `cbionav` alias) or `DEFAULT_MODEL` env var. Other generation parameters are fixed via settings/env and not user-controllable per request.
+- Requests accept `messages`, `stream`, and optional `"full_stream"`; model/API key/MCP URL/system prompt are set server-side via environment.
 
 ### Docker
 
@@ -72,8 +72,9 @@ docker compose up --build
 
 ### Streaming modes
 
-- By default, the agent streams step-by-step (assistant thoughts + tool calls/results) when `stream: true` is requested.
-- To disable step streaming and only stream the final answer in OpenAI-style chunks, set `ENABLE_STEP_STREAMING=false` in the environment.
+- By default, streaming behavior follows server env settings.
+- Set `"full_stream": true` in a request to force live streaming of assistant text and tool notices/args/responses and include tool logs in the output (overrides env).
+- To disable step streaming globally and only stream the final answer in OpenAI-style chunks, set `ENABLE_STEP_STREAMING=false` in the environment.
 
 ### LibreChat
 

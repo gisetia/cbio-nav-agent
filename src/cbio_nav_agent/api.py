@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import List, Optional
+import os
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -22,14 +23,10 @@ from .settings import (
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
     ENABLE_STEP_STREAMING,
+    INCLUDE_TOOL_LOGS_FINAL,
 )
 
 app = FastAPI()
-
-MODEL_ALIASES = {
-    # Maps friendly names to provider-qualified models.
-    "cbionav": DEFAULT_MODEL,
-}
 
 class Message(BaseModel):
     role: str = Field(..., description="Role of the message sender (e.g., user).")
@@ -37,24 +34,9 @@ class Message(BaseModel):
 
 
 class ChatCompletionRequest(BaseModel):
-    model: str = DEFAULT_MODEL
     messages: List[Message]
     stream: bool = True
-    api_key: Optional[str] = None
-    mcp_server_url: str = DEFAULT_MCP_SERVER_URL
-    system_prompt: Optional[str] = None
-
-
-def _resolve_model(model: str) -> str:
-    """Resolve incoming model aliases to provider-qualified model names."""
-    if not model:
-        return DEFAULT_MODEL
-    normalized = model.strip().lower()
-    if normalized in MODEL_ALIASES:
-        return MODEL_ALIASES[normalized]
-    if ":" not in model:
-        return DEFAULT_MODEL
-    return model
+    full_stream: Optional[bool] = None
 
 
 def _extract_user_question(messages: List[Message]) -> Optional[str]:
@@ -76,10 +58,24 @@ def _chunk_answer(answer: str, chunk_size: int = DEFAULT_CHUNK_SIZE) -> List[str
 async def chat_completions(req: ChatCompletionRequest):
     print("-- -- [api] incoming request", req.model_dump(exclude_none=True))
 
-    resolved_model = _resolve_model(req.model)
-    resolved_system_prompt = (
-        req.system_prompt if req.system_prompt is not None else DEFAULT_SYSTEM_PROMPT
-    )
+    # Requests cannot override core settings; use defaults.
+    resolved_model = DEFAULT_MODEL
+    resolved_system_prompt = DEFAULT_SYSTEM_PROMPT
+    step_streaming = ENABLE_STEP_STREAMING
+    include_tool_logs_final = INCLUDE_TOOL_LOGS_FINAL
+    # If full_stream is requested, stream everything live and include tool logs.
+    if req.full_stream:
+        step_streaming = True
+        include_tool_logs_final = True
+        stream_text_live = True
+        stream_tool_notices_live = True
+        stream_tool_args_live = True
+        stream_tool_responses_live = True
+    else:
+        stream_text_live = None
+        stream_tool_notices_live = None
+        stream_tool_args_live = None
+        stream_tool_responses_live = None
 
     question = _extract_user_question(req.messages)
     if not question:
@@ -92,38 +88,56 @@ async def chat_completions(req: ChatCompletionRequest):
         {"role": message.role, "content": message.content} for message in req.messages
     ]
 
-    try:
-        agent = ClaudeMCPAgent(
-            api_key=req.api_key,
-            model=resolved_model,
-            mcp_server_url=req.mcp_server_url,
-            max_output_tokens=DEFAULT_MAX_OUTPUT_TOKENS,
-            system_prompt=resolved_system_prompt,
-            temperature=DEFAULT_TEMPERATURE,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    agent = ClaudeMCPAgent(
+        api_key=None,
+        model=resolved_model,
+        mcp_server_url=DEFAULT_MCP_SERVER_URL,
+        max_output_tokens=DEFAULT_MAX_OUTPUT_TOKENS,
+        system_prompt=resolved_system_prompt,
+        temperature=DEFAULT_TEMPERATURE,
+    )
 
     if req.stream:
         print(
             "-- -- [api] streaming response body",
-            {"model_requested": req.model, "model_used": resolved_model, "step_streaming": ENABLE_STEP_STREAMING},
+            {"model_used": resolved_model, "step_streaming": step_streaming},
         )
-        if ENABLE_STEP_STREAMING:
-            stream = agent.ask_stream(conversation)
+        if step_streaming:
+            stream = agent.ask_stream(
+                conversation,
+                include_tool_logs_final=include_tool_logs_final,
+                stream_text_live=stream_text_live,
+                stream_tool_notices_live=stream_tool_notices_live,
+                stream_tool_args_live=stream_tool_args_live,
+                stream_tool_responses_live=stream_tool_responses_live,
+            )
             return StreamingResponse(
                 async_sse_chat_completions(stream, model=agent.model),
                 media_type="text/event-stream",
             )
         # Fallback: stream only the final answer in OpenAI-style chunks.
-        answer = await agent.ask(conversation)
+        answer = await agent.ask(
+            conversation,
+            include_tool_logs_final=include_tool_logs_final,
+            stream_text_live=stream_text_live,
+            stream_tool_notices_live=stream_tool_notices_live,
+            stream_tool_args_live=stream_tool_args_live,
+            stream_tool_responses_live=stream_tool_responses_live,
+        )
         chunks = _chunk_answer(answer, chunk_size=DEFAULT_CHUNK_SIZE)
         return StreamingResponse(
             sse_chat_completions(chunks, model=agent.model),
             media_type="text/event-stream",
         )
 
-    answer = await agent.ask(conversation)
+    answer = await agent.ask(
+        conversation,
+        include_tool_logs_final=include_tool_logs_final,
+        stream_text_live=stream_text_live,
+        stream_tool_notices_live=stream_tool_notices_live,
+        stream_tool_args_live=stream_tool_args_live,
+        stream_tool_responses_live=stream_tool_responses_live,
+    )
     chunks = _chunk_answer(answer, chunk_size=DEFAULT_CHUNK_SIZE)
     payload = chat_completion_response(
         chunk_iterable=chunks,
@@ -132,7 +146,7 @@ async def chat_completions(req: ChatCompletionRequest):
     )
     print(
         "-- -- [api] json response body",
-        {"model_requested": req.model, "model_used": resolved_model, "payload": payload},
+        {"model_used": resolved_model, "payload": payload},
     )
     return JSONResponse(payload)
 
@@ -140,4 +154,4 @@ async def chat_completions(req: ChatCompletionRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("cbio_nav_agent.api:app", host="0.0.0.0", port=4000, reload=False)
+    uvicorn.run("cbio_nav_agent.api:app", host="0.0.0.0", port=5000, reload=False)
