@@ -32,6 +32,7 @@ curl -X POST http://localhost:5000/chat/completions \
   -d '{
     "stream": true,
     "full_stream": true,
+    "formatting": false,
     "messages": [
       {"role": "user", "content": "What is the median survival time in the Pediatric Neuroblastoma study from TARGET?"}
     ]
@@ -52,13 +53,14 @@ curl -X POST http://localhost:5000/chat/completions \
 - `DEFAULT_MODEL` (optional): Override the default Claude model (applied server-side; requests cannot override).
 - `DEFAULT_TEMPERATURE`, `DEFAULT_MAX_OUTPUT_TOKENS`, `DEFAULT_CHUNK_SIZE` (optional): Set fixed generation parameters (not user-overridable per request).
 - Streaming controls (env): `ENABLE_STEP_STREAMING`, `STREAM_TEXT_LIVE`, `STREAM_TOOL_NOTICES_LIVE`, `STREAM_TOOL_ARGS_LIVE`, `STREAM_TOOL_RESPONSES_LIVE`, `INCLUDE_FINAL_TEXT`, `INCLUDE_TOOL_LOGS_FINAL`.
+- Formatting: `ENABLE_FORMATTING` (env, default true); per-request override via `"formatting": false|true`.
 
 ### Notes
 
 - The API is intentionally minimal; extend the agent logic in `cbio_nav_agent/agent.py` as needed.
 - The service defaults to streaming responses; set `"stream": false` to receive one JSON payload.
 - The default system prompt lives in `prompts/system_prompt.txt` (loaded from the current working directory or `SYSTEM_PROMPT_FILE`). Edit that file to change the agent’s initial instructions.
-- Requests accept `messages`, `stream`, and optional `"full_stream"`; model/API key/MCP URL/system prompt are set server-side via environment.
+- Requests accept `messages`, `stream`, and optional `"full_stream"` and `"formatting"`; model/API key/MCP URL/system prompt are set server-side via environment.
 
 ### Docker
 

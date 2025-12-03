@@ -37,6 +37,7 @@ class ChatCompletionRequest(BaseModel):
     messages: List[Message]
     stream: bool = True
     full_stream: Optional[bool] = None
+    formatting: Optional[bool] = True
 
 
 def _extract_user_question(messages: List[Message]) -> Optional[str]:
@@ -63,6 +64,7 @@ async def chat_completions(req: ChatCompletionRequest):
     resolved_system_prompt = DEFAULT_SYSTEM_PROMPT
     step_streaming = ENABLE_STEP_STREAMING
     include_tool_logs_final = INCLUDE_TOOL_LOGS_FINAL
+    formatting_enabled = ENABLE_FORMATTING if req.formatting is None else req.formatting
     # If full_stream is requested, stream everything live and include tool logs.
     if req.full_stream:
         step_streaming = True
@@ -106,6 +108,7 @@ async def chat_completions(req: ChatCompletionRequest):
             stream = agent.ask_stream(
                 conversation,
                 include_tool_logs_final=include_tool_logs_final,
+                format_enabled=formatting_enabled,
                 stream_text_live=stream_text_live,
                 stream_tool_notices_live=stream_tool_notices_live,
                 stream_tool_args_live=stream_tool_args_live,
@@ -119,6 +122,7 @@ async def chat_completions(req: ChatCompletionRequest):
         answer = await agent.ask(
             conversation,
             include_tool_logs_final=include_tool_logs_final,
+            format_enabled=formatting_enabled,
             stream_text_live=stream_text_live,
             stream_tool_notices_live=stream_tool_notices_live,
             stream_tool_args_live=stream_tool_args_live,
@@ -133,6 +137,7 @@ async def chat_completions(req: ChatCompletionRequest):
     answer = await agent.ask(
         conversation,
         include_tool_logs_final=include_tool_logs_final,
+        format_enabled=formatting_enabled,
         stream_text_live=stream_text_live,
         stream_tool_notices_live=stream_tool_notices_live,
         stream_tool_args_live=stream_tool_args_live,

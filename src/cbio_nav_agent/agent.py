@@ -16,6 +16,7 @@ from .settings import (
     DEFAULT_MODEL,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
+    ENABLE_FORMATTING,
     STREAM_TEXT_LIVE,
     STREAM_TOOL_NOTICES_LIVE,
     STREAM_TOOL_ARGS_LIVE,
@@ -74,6 +75,7 @@ class ClaudeMCPAgent:
         *,
         stream_mode: bool = True,
         include_tool_logs_final: bool = INCLUDE_TOOL_LOGS_FINAL,
+        format_enabled: Optional[bool] = None,
         stream_text_live: Optional[bool] = None,
         stream_tool_notices_live: Optional[bool] = None,
         stream_tool_args_live: Optional[bool] = None,
@@ -107,6 +109,7 @@ class ClaudeMCPAgent:
         eff_stream_tool_responses_live = (
             STREAM_TOOL_RESPONSES_LIVE if stream_tool_responses_live is None else stream_tool_responses_live
         )
+        eff_format = ENABLE_FORMATTING if format_enabled is None else format_enabled
 
         while True:
             logger.info(
@@ -158,9 +161,9 @@ class ClaudeMCPAgent:
                     },
                 )
                 if stream_mode and eff_stream_text_live:
-                    yield combined_text
+                    yield self._format_text(combined_text, eff_format)
                 elif not stream_mode and INCLUDE_FINAL_TEXT:
-                    ordered_events.append(combined_text)
+                    ordered_events.append(self._format_text(combined_text, eff_format))
 
             if not tool_requests:
                 logger.info("No tool requests, finishing.")
@@ -174,9 +177,9 @@ class ClaudeMCPAgent:
                     json.dumps(tool_use.input or {}, indent=2),
                 )
                 if stream_mode and eff_stream_tool_notices_live:
-                    yield f"Calling {tool_use.name}..."
+                    yield self._format_tool_notice(tool_use.name, eff_format)
                 elif not stream_mode:
-                    ordered_events.append(f"Calling {tool_use.name}...")
+                    ordered_events.append(self._format_tool_notice(tool_use.name, eff_format))
                 tool_output = await self.mcp_client.call_tool(
                     tool_name=tool_use.name, arguments=tool_use.input or {}
                 )
@@ -187,30 +190,18 @@ class ClaudeMCPAgent:
                 )
                 if stream_mode:
                     if eff_stream_tool_args_live:
-                        yield (
-                            f"Args for {tool_use.name}: {json.dumps(tool_use.input or {}, indent=2)}"
-                        )
+                        yield self._format_tool_args(tool_use.name, tool_use.input or {}, eff_format)
                     if eff_stream_tool_responses_live:
-                        yield (
-                            (tool_output or "No content returned by tool.").strip()
-                        )
+                        yield self._format_tool_response(tool_use.name, tool_output, eff_format)
                     if include_tool_logs_final:
                         if not eff_stream_tool_args_live:
-                            tool_logs.append(
-                                f"Args for {tool_use.name}: {json.dumps(tool_use.input or {}, indent=2)}"
-                            )
+                            tool_logs.append(self._format_tool_args(tool_use.name, tool_use.input or {}, eff_format))
                         if not eff_stream_tool_responses_live:
-                            tool_logs.append(
-                                (tool_output or "No content returned by tool.").strip()
-                            )
+                            tool_logs.append(self._format_tool_response(tool_use.name, tool_output, eff_format))
                 else:
                     if include_tool_logs_final:
-                        ordered_events.append(
-                            f"Args for {tool_use.name}: {json.dumps(tool_use.input or {}, indent=2)}"
-                        )
-                        ordered_events.append(
-                            (tool_output or "No content returned by tool.").strip()
-                        )
+                        ordered_events.append(self._format_tool_args(tool_use.name, tool_use.input or {}, eff_format))
+                        ordered_events.append(self._format_tool_response(tool_use.name, tool_output, eff_format))
                 tool_results.append(
                     ToolResultBlockParam(
                         type="tool_result",
@@ -239,6 +230,7 @@ class ClaudeMCPAgent:
         messages: List[MessageParam],
         *,
         include_tool_logs_final: bool = INCLUDE_TOOL_LOGS_FINAL,
+        format_enabled: Optional[bool] = None,
         stream_text_live: Optional[bool] = None,
         stream_tool_notices_live: Optional[bool] = None,
         stream_tool_args_live: Optional[bool] = None,
@@ -250,6 +242,7 @@ class ClaudeMCPAgent:
             messages,
             stream_mode=False,
             include_tool_logs_final=include_tool_logs_final,
+            format_enabled=format_enabled,
             stream_text_live=stream_text_live,
             stream_tool_notices_live=stream_tool_notices_live,
             stream_tool_args_live=stream_tool_args_live,
@@ -267,3 +260,29 @@ class ClaudeMCPAgent:
         if normalized.startswith("anthropic:"):
             return normalized.split(":", 1)[1]
         return normalized
+
+    @staticmethod
+    def _format_text(text: str, enable: bool) -> str:
+        if not enable:
+            return text
+        return f"\n\n{text}"
+
+    @staticmethod
+    def _format_tool_notice(tool_name: str, enable: bool) -> str:
+        if not enable:
+            return f"Calling {tool_name}"
+        return f"\n\n`[tool]` Calling `{tool_name}`"
+
+    @staticmethod
+    def _format_tool_args(tool_name: str, args: dict, enable: bool) -> str:
+        payload = json.dumps(args, indent=2)
+        if not enable:
+            return f"Args for {tool_name}: {payload}"
+        return f" with args:\n```json\n{payload}\n```"
+
+    @staticmethod
+    def _format_tool_response(tool_name: str, output: Optional[str], enable: bool) -> str:
+        content = (output or "No content returned by tool.").strip()
+        if not enable:
+            return f"Response from {tool_name}: {content}"
+        return f"\n\n`[tool]` Response from `{tool_name}`\n```json\n{content}\n```"
