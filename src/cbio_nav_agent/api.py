@@ -22,8 +22,10 @@ from .settings import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
+    ENABLE_FORMATTING,
     ENABLE_STEP_STREAMING,
     INCLUDE_TOOL_LOGS_FINAL,
+    SIMULATE,
 )
 
 app = FastAPI()
@@ -65,6 +67,7 @@ async def chat_completions(req: ChatCompletionRequest):
     step_streaming = ENABLE_STEP_STREAMING
     include_tool_logs_final = INCLUDE_TOOL_LOGS_FINAL
     formatting_enabled = ENABLE_FORMATTING if req.formatting is None else req.formatting
+    simulate = SIMULATE if req.simulate is None else req.simulate
     # If full_stream is requested, stream everything live and include tool logs.
     if req.full_stream:
         step_streaming = True
@@ -78,6 +81,9 @@ async def chat_completions(req: ChatCompletionRequest):
         stream_tool_notices_live = None
         stream_tool_args_live = None
         stream_tool_responses_live = None
+
+    if simulate:
+        print("-- -- [api] simulation mode enabled; returning fake responses.")
 
     question = _extract_user_question(req.messages)
     if not question:
@@ -97,6 +103,7 @@ async def chat_completions(req: ChatCompletionRequest):
         max_output_tokens=DEFAULT_MAX_OUTPUT_TOKENS,
         system_prompt=resolved_system_prompt,
         temperature=DEFAULT_TEMPERATURE,
+        simulate=simulate,
     )
 
     if req.stream:

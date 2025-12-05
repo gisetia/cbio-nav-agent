@@ -49,6 +49,8 @@ INCLUDE_TOOL_LOGS_FINAL = os.getenv("INCLUDE_TOOL_LOGS_FINAL", "true").lower() i
 }
 # Toggle markdown-style formatting of streamed/final content.
 ENABLE_FORMATTING = os.getenv("ENABLE_FORMATTING", "true").lower() in {"1", "true", "yes"}
+# Bypass external calls and return canned responses for testing.
+SIMULATE = os.getenv("SIMULATE", "0").lower() in {"1", "true", "yes"}
 # Resolve a default prompt path, preferring an explicit env var.
 ENV_SYSTEM_PROMPT_FILE = os.getenv("SYSTEM_PROMPT_FILE")
 

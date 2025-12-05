@@ -23,7 +23,6 @@ services:
       INCLUDE_TOOL_LOGS_FINAL: ${INCLUDE_TOOL_LOGS_FINAL:-false}
       SYSTEM_PROMPT_FILE: ${SYSTEM_PROMPT_FILE:-}
       SIMULATE: ${SIMULATE:-0}
-      # You can also set DEFAULT_MODEL/DEFAULT_TEMPERATURE/etc. here if desired.
     volumes:
       # Allow editing prompts without rebuilding.
       - ./prompts:/app/prompts:ro

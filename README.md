@@ -61,6 +61,7 @@ curl -X POST http://localhost:5000/chat/completions \
 - The service defaults to streaming responses; set `"stream": false` to receive one JSON payload.
 - The default system prompt lives in `prompts/system_prompt.txt` (loaded from the current working directory or `SYSTEM_PROMPT_FILE`). Edit that file to change the agent’s initial instructions.
 - Requests accept `messages`, `stream`, and optional `"full_stream"` and `"formatting"`; model/API key/MCP URL/system prompt are set server-side via environment.
+- Set `SIMULATE=1` to bypass Anthropic/MCP calls and return a canned response (useful for testing without an API key).
 
 ### Docker
 
