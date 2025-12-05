@@ -1,6 +1,6 @@
 # cBio Navigator Agent
 
-Claude-powered agent that can reach tools served by the MCP endpoint at `http://cbioportal-navigator:8002/mcp` and exposes an OpenAI-compatible `/chat/completions` API.
+Agent that can reach tools served by the MCP endpoint at `http://cbioportal-navigator:8002/mcp` and exposes an OpenAI-compatible `/chat/completions` API. Anthropic models currently support the MCP tool-use loop.
 
 ## Quickstart
 
@@ -48,9 +48,9 @@ curl -X POST http://localhost:5000/chat/completions \
 
 ### Configuration
 
-- `ANTHROPIC_API_KEY` (required): API key for Claude.
+- `ANTHROPIC_API_KEY` (required for Anthropic models with tool use).
 - `MCP_SERVER_URL` (optional): Defaults to `http://cbioportal-navigator:8002/mcp`. In Docker on macOS/Windows, use `http://host.docker.internal:8002/mcp` to reach the host.
-- `DEFAULT_MODEL` (optional): Override the default Claude model (applied server-side; requests cannot override).
+- `DEFAULT_MODEL` (optional): Override the default model (applied server-side; requests cannot override). Tool-use loop currently works with Anthropic models.
 - `DEFAULT_TEMPERATURE`, `DEFAULT_MAX_OUTPUT_TOKENS`, `DEFAULT_CHUNK_SIZE` (optional): Set fixed generation parameters (not user-overridable per request).
 - Streaming controls (env): `ENABLE_STEP_STREAMING`, `STREAM_TEXT_LIVE`, `STREAM_TOOL_NOTICES_LIVE`, `STREAM_TOOL_ARGS_LIVE`, `STREAM_TOOL_RESPONSES_LIVE`, `INCLUDE_FINAL_TEXT`, `INCLUDE_TOOL_LOGS_FINAL`.
 - Formatting: `ENABLE_FORMATTING` (env, default true); per-request override via `"formatting": false|true`.
@@ -71,6 +71,16 @@ docker compose up --build
 - The container listens on port `5000` by default (adjust the compose `ports` mapping if you need a different host port).
 
 - Ensure `ANTHROPIC_API_KEY` and `MCP_SERVER_URL` are set in `.env` or the compose `environment`. Use `host.docker.internal` to reach a host-running MCP server on macOS/Windows, or your host IP on Linux.
+
+### Docker usage
+
+- Build and run: `docker compose up --build`
+- Environment to set (e.g., via `.env`):
+  - `ANTHROPIC_API_KEY` (required)
+  - `MCP_SERVER_URL` (defaults to `http://host.docker.internal:8002/mcp` in compose)
+  - Streaming/formatting env flags: `ENABLE_STEP_STREAMING`, `STREAM_TEXT_LIVE`, `STREAM_TOOL_NOTICES_LIVE`, `STREAM_TOOL_ARGS_LIVE`, `STREAM_TOOL_RESPONSES_LIVE`, `INCLUDE_FINAL_TEXT`, `INCLUDE_TOOL_LOGS_FINAL`, `ENABLE_FORMATTING`
+- Per-request overrides: set `"full_stream": true` and/or `"formatting": true|false` in the request payload
+- API available at `http://localhost:5000/chat/completions` unless you remap the port
 
 ### Streaming modes
 
